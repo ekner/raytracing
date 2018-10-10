@@ -135,8 +135,22 @@ public class Vec3 {
     return vecCopy;
   }
 
+  /**
+   * Get the dot product of this vector and the one supplied.
+   * @param secondFactor The second factor in the multiplication.
+   */
   public double getDotProduct(Vec3 secondFactor) {
     return xval * secondFactor.getX() + yval * secondFactor.getY() + zval * secondFactor.getZ();
+  }
+
+  /**
+   * Get the reflection vector.
+   * @param normal The normal of the reflection surface. Must be normalized.
+   * @return The reflection vector.
+   */
+  public Vec3 getReflectionVector(Vec3 normal) {
+    //return subtract(normal.multiply(getDotProduct(normal) * 2)); // Denna ska vara 2
+    return subtract(normal.multiply(getDotProduct(normal) * 2)).multiply(Math.random() * 0.1 + 1);
   }
 
   /**

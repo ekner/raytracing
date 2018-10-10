@@ -1,14 +1,16 @@
 package raytracer;
 
 import java.util.ArrayList;
-
 import javafx.scene.paint.Color;
+import javafx.util.Pair;
 
 public class RenderScene {
   private int width;
   private int height;
-  private ArrayList<Sphere> spheres;
+  private ArrayList<Light> lights;
+  private ArrayList<RenderObject> renderObjects;
   private Vec3 cameraPos;
+  private static final int NUM_REFLECTIONS = 5;
 
   /**
    * Create the RenderScene.
@@ -18,11 +20,16 @@ public class RenderScene {
   public RenderScene(int width, int height) {
     this.width = width;
     this.height = height;
-    spheres = new ArrayList<>();
+    lights = new ArrayList<>();
+    renderObjects = new ArrayList<>();
   }
 
-  public void addSphere(Sphere sphere) {
-    spheres.add(sphere);
+  public void addLight(Light light) {
+    lights.add(light);
+  }
+
+  public void addObject(RenderObject ro) {
+    renderObjects.add(ro);
   }
 
   public void setCameraPos(Vec3 pos) {
@@ -46,7 +53,7 @@ public class RenderScene {
 
     for (int y = 0; y < height; y++) {
       for (int x = 0; x < width; ++x) {
-        Color color = getPixel((double) x / width, (double) y / height);
+        Color color = getPixel((double) x / width - 0.5, (double) y / height - 0.5);
         pixels.add(width * y + x, color);
       }
     }
@@ -54,35 +61,86 @@ public class RenderScene {
     return pixels;
   }
 
-  private double getIntersectionDistance(Vec3 lineDir, Vec3 lineOrig, Sphere sphere) {
-    double t1 = lineOrig.subtract(sphere.getPos()).getDotProduct(lineDir);
-    double t2 = Math.pow(t1, 2);
-    double t3 = Math.pow(lineOrig.subtract(sphere.getPos()).getNorm(), 2);
-    double t4 = Math.pow(sphere.getRadius(), 2);
+  private double getLightness(Vec3 pos, Vec3 normal, RenderObject ro) {
+    double totalVal = 0;
 
-    if (t2 - t3 + t4 >= 0) {
-      return -t1 - Math.sqrt(t2 - t3 + t4);
+    for (Light light : lights) {
+      Vec3 lightNormal = pos.subtract(light.getPos()).normalize();
+      CollisionData collisionData = getCollisionData(lightNormal, light.getPos());
+
+      if (collisionData.renderObject == ro) {
+        double cosin = normal.getDotProduct(lightNormal);
+        totalVal += (1 - ((cosin + 1) / 2)) * light.getValue();
+      }
+    }
+
+    if (totalVal > 1) {
+      totalVal = 1;
+    }
+
+    return totalVal;
+  }
+
+  private CollisionData getCollisionData(Vec3 lineDir, Vec3 lineOrig) {
+    CollisionData collisionData = new CollisionData();
+
+    for (RenderObject ro : renderObjects) {
+      double thisDistance = ro.getIntersectionDistance(lineDir, lineOrig);
+
+      if (thisDistance >= 0 && (thisDistance < collisionData.distance
+          || collisionData.distance == -1)) {
+        collisionData.distance = thisDistance;
+        collisionData.renderObject = ro;
+      }
+    }
+
+    return collisionData;
+  }
+
+  private ArrayList<CollisionData> trace(Vec3 direction, Vec3 origin) {
+    ArrayList<CollisionData> collidedObjects = new ArrayList<>();
+
+    for (int i = 0; i < NUM_REFLECTIONS; i++) {
+      CollisionData collisionData = getCollisionData(direction, origin);
+
+      if (collisionData.distance >= 0) {
+        origin = origin.add(direction.multiply(collisionData.distance));
+        Vec3 normal = collisionData.renderObject.getNormal(origin);
+        direction = direction.getReflectionVector(normal);
+        collidedObjects.add(collisionData);
+        collidedObjects.get(i).lightness = getLightness(origin, direction,
+                                                        collisionData.renderObject);
+      } else {
+        break;
+      }
+    }
+
+    return collidedObjects;
+  }
+
+  private Color getColor(ArrayList<CollisionData> collidedObjects) {
+    if (collidedObjects.size() > 0) {
+      Color color;
+
+      if (collidedObjects.get(0).renderObject instanceof Sphere) {
+        color = collidedObjects.get(collidedObjects.size() - 1).renderObject.getColor();
+      } else {
+        color = collidedObjects.get(0).renderObject.getColor();
+      }
+
+      double lightness = collidedObjects.get(0).lightness;
+      return new Color(color.getRed() * lightness, color.getGreen() * lightness,
+                       color.getBlue() * lightness, 1);
     } else {
-      return -1; // There is no solution.
+      return new Color(0, 0, 0, 1);
     }
   }
 
   private Color getPixel(double x, double y) {
     Vec3 screenPixelPos = new Vec3(x, y, 0);
-    Vec3 screenDir = screenPixelPos.subtract(cameraPos).normalize();
-    double intersectionDistance = getIntersectionDistance(screenDir, cameraPos, spheres.get(0));
-
-    double green = (intersectionDistance - 0.5) / (0.8867334 - 0.5198039);
-    if (green > 1) {
-      green = 1;
-    } else if (green < 0) {
-      green = 0;
-    }
-
-    if (intersectionDistance >= 0) {
-      return new Color(1, green, 0, 1);
-    } else {
-      return new Color(1, 1, 1, 1);
-    }
+    Vec3 direction = screenPixelPos.subtract(cameraPos).normalize();
+    Vec3 origin = new Vec3(cameraPos);
+    ArrayList<CollisionData> collidedObjects = trace(direction, origin);
+    return getColor(collidedObjects);
   }
 }
