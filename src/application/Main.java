@@ -17,7 +17,6 @@ import raytracer.Util;
 import raytracer.Vec3;
 
 public class Main extends Application {
-
   private static final int winWidth = 400;
   private static final int winHeight = 400;
   private static final int renderDetail = 20;
@@ -40,7 +39,7 @@ public class Main extends Application {
     Group root = new Group();
     canvas = new Canvas(winWidth, winHeight);
     root.getChildren().add(canvas);
-    primaryStage.setTitle("Raytracing");
+    primaryStage.setTitle("Ray tracing");
     primaryStage.setScene(new Scene(root, winWidth, winHeight));
   }
 
